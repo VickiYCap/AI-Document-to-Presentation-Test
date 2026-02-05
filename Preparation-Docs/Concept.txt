@@ -1,0 +1,43 @@
+FRONTEND:
+- User uploads a document (pdf for now)
+                or
+- User inputs a query for what they want
+
+- Uploaded file/query gets connects to the backend
+
+-human middleware frontend ui is probably needed
+
+------------------------------------------------------------------------------
+BACKEND:
+- LLM recieves the file and scrapes the file for important information
+
+- If working on presentation slides we should have:
+    - a hard coded set of presentation styles (JSON) that the LLM can choose between
+    - EX: 
+            {
+                "type" : "title-slide",
+                "title" : "{scraped title name}",
+                "subtitle" : "{scraped subtitle}"
+            },
+             {
+                "type" : "bullet-slide",
+                "title" : "{scraped title name}",
+                "bullets" : "{scraped information}"
+            }
+            .
+            .(and so on)
+            .
+
+- There should probably be a human middleware to make sure the scraped information is correct
+- The LLM takes the scraped information and inserts it into the code (most likely JSON)
+
+
+- If working on graph style presentations 
+    - IDK YET
+
+----------------------------------------------------------------------------------
+How Claude Gamma seems to work
+- reads document or prompt
+- summarizes the content into slide ready points
+- creates a .pptx file presentation
+- follows user instructions for number of slides, structure, simple layout instructions
