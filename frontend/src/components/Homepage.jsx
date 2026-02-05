@@ -10,9 +10,10 @@ function Homepage() {
         <button className='search-button'>Search</button>
       </div>
         <div style={{marginTop:"30px"}}> OR </div>
+
         <div className='file-upload'>
           <div>Select a file to turn into a presentation</div>
-          <form action = "/upload" method="post" encType="multipart/form-data">
+          <form action = "http://localhost:5000/upload" method="post" encType="multipart/form-data">
             <input type="file" name="file"/>
             <input type="submit" value="Upload"/>
           </form>

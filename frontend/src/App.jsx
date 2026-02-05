@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import './App.css';
-import Presentation from './components/Presentation';
 import Homepage from './components/Homepage';
+import PolicyGraph from './components/PolicyGraph';
 
 function App() {
   return (
     <div className='app-container'>
-      <Homepage />
-      <Presentation />
+      <div className='ai-container'>
+        <Homepage />
+      </div>
+      <div className='active-tab-container'>
+        <PolicyGraph/>
+
+      </div>
     </div>
     
   );
