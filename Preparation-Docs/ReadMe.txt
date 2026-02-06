@@ -19,4 +19,4 @@ Running the Backend:
 -install python-multipart
     - pip install python-multipart
 
-- uvicorn main:app --reload
+- uvicorn main:app --reload --port 8000

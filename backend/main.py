@@ -1,37 +1,44 @@
-# main.py
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import os
+from extractor import parse_pdf_bytes 
 
 app = FastAPI()
 
-# CORS for local dev; adjust origins for your setup
+# Allow Vite frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+@app.get("/")
+def health():
+    return {"status": "ok"}
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Please upload a PDF")
 
-    save_path = os.path.join(UPLOAD_DIR, file.filename)
+    #read uploaded file into memory
+    data = await file.read()  
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
 
-    # Stream the incoming file to disk
-    with open(save_path, "wb") as out_file:
-        while True:
-            chunk = await file.read(1024 * 1024)  # 1MB chunks
-            if not chunk:
-                break
-            out_file.write(chunk)
+    # Hand off to extractor.py
+    text = parse_pdf_bytes(data)
 
-    # Return a simple JSON confirming receipt
-    return JSONResponse({"ok": True, "filename": file.filename, "savedTo": save_path})
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="No extractable text (maybe a scanned PDF)")
+
+    return JSONResponse({
+        "ok": True,
+        "filename": file.filename,
+        "preview": text[:500], 
+        "length": len(text)
+    })
