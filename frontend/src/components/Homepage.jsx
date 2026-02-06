@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useContext } from 'react';
 import './Homepage.css';
 import { DataContext } from '../DataContext';
+import { useNavigate } from 'react-router-dom';
 
 function Homepage() {
   const [file, setFile] = useState(null);
   const{setParsedData} = useContext(DataContext);
+  const navigate = useNavigate();
   
  const handleFileUpload = async (e) => {
     e.preventDefault();
@@ -32,6 +34,7 @@ function Homepage() {
         alert("Upload successful! has reached backend.");
         console.log("This is the scraped data:\n", data);
         setParsedData(data)
+        navigate('/testing');
       }
     } catch (err) {
       alert("Error uploading file: " + err.message);
