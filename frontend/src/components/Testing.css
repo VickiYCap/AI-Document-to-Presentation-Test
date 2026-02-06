@@ -1,0 +1,15 @@
+.testing-container{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100vh;
+    width: 100%;
+    overflow: auto;
+    background-color: white;
+    color: black;
+}
+
+.parsed-data{
+    padding: 5%;
+    color: black;
+}

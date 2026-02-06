@@ -41,6 +41,12 @@ function Homepage() {
   return (
     <>
     <div className='homepage-container'>
+      <div className="navbar-container">
+          <button onClick={() => navigate('/policy-graph')}>Policy Graph</button>
+          <button onClick={() => navigate('/presentation')}>Presentation Builder</button>
+          <button onClick={() => navigate('/testing')}>Testing</button>
+        </div>
+
       <h1>Welcome!</h1>
       <h2>What can I help with? </h2>
       <div className='search-query'>
