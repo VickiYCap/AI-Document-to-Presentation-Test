@@ -41,6 +41,9 @@
    height: 30px;
    border-radius: 10px;
    margin-right: 20px;
+   background-color: white;
+   color : black;
+   padding: 2px;
 }
 
 .search-button{

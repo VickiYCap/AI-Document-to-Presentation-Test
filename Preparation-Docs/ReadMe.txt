@@ -1,6 +1,7 @@
 Running the frontend
 -----------------------------------------------
 - install node.js 
+- install react-router-dom
 - cd frontend
 - npm run dev
 

@@ -45,6 +45,7 @@ function Homepage() {
     <>
     <div className='homepage-container'>
       <div className="navbar-container">
+          <button onClick={() => navigate('/')}>Home</button>
           <button onClick={() => navigate('/policy-graph')}>Policy Graph</button>
           <button onClick={() => navigate('/presentation')}>Presentation Builder</button>
           <button onClick={() => navigate('/testing')}>Testing</button>
