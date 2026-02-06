@@ -14,10 +14,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#checks if the server is running
 @app.get("/")
 def health():
     return {"status": "ok"}
 
+#endpoint to upload PDF and extract text
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     if not file or not file.filename:
@@ -39,6 +41,6 @@ async def upload(file: UploadFile = File(...)):
     return JSONResponse({
         "ok": True,
         "filename": file.filename,
-        "preview": text[:500], 
-        "length": len(text)
+        "length": len(text),
+        "text": text
     })

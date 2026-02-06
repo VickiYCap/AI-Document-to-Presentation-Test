@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { useContext } from 'react';
 import './Homepage.css';
+import { DataContext } from '../DataContext';
+
 function Homepage() {
   const [file, setFile] = useState(null);
-
+  const{setParsedData} = useContext(DataContext);
   
  const handleFileUpload = async (e) => {
     e.preventDefault();
@@ -27,7 +30,8 @@ function Homepage() {
         alert("Upload failed: " + (data.detail || "Unknown error"));
       } else {
         alert("Upload successful! has reached backend.");
-        console.log(data);
+        console.log("This is the scraped data:\n", data);
+        setParsedData(data)
       }
     } catch (err) {
       alert("Error uploading file: " + err.message);
@@ -45,7 +49,7 @@ function Homepage() {
       </div>
         <div style={{marginTop:"30px"}}> OR </div>
 
-        <div className='file-upload'>y
+        <div className='file-upload'>
           <div>Select a file to turn into a presentation</div>
           <form onSubmit={handleFileUpload}>
             <input type="file" name="file" onChange={(e) => setFile(e.target.files[0])}/>

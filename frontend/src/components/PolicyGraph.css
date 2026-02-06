@@ -2,13 +2,14 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     height: 100vh;
     width: 100%;
+    overflow: auto;
     background-color: white;
+    color: black;
 }
 
-.policy-container h2{
-    font-size: 24px;
+.parsed-data{
+    padding: 5%;
     color: black;
 }
