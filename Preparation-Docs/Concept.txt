@@ -1,4 +1,12 @@
-FRONTEND:
+-------------------------- CLAUDE CONCEPT ------------------------------
+How Claude Gamma seems to work
+- reads document or prompt
+- summarizes the content into slide ready points
+- creates a .pptx file presentation
+- follows user instructions for number of slides, structure, simple layout instructions
+
+
+---------------------------- FRONTEND ----------------------------------
 - User uploads a document (pdf for now)
                 or
 - User inputs a query for what they want
@@ -7,9 +15,25 @@ FRONTEND:
 
 -human middleware frontend ui is probably needed
 
-------------------------------------------------------------------------------
-BACKEND:
-- LLM recieves the file and scrapes the file for important information
+
+---------------------------- BACKEND ----------------------------------
+- Backend recieves the document and scrapes it
+- Preprocessing needed to break the scraped text into chunks with meta data
+
+- prompt the LLM to break down the chunked information into nodes and edges (relational graph info)
+    -Ex: Extract all entities and relationships from the text. 
+        Output in triples of (subject, relation, object). 
+        Use only relations that appear explicitly in the text.
+
+- after recieving the outputted relations we need to normalize it, remove duplicates
+    - ex: “reduces” and “helps with” might both map to TREATMENT_OF
+    - ex: "Aspirin" vs. "acetylsalicylic acid" → merge into one node. (bc they are the same thing)
+
+- then store the normalized data into neo4j
+
+
+------------------------------ NEO4J ---------------------------------
+(i have no idea how to use neo4j)
 
 - If working on presentation slides we should have:
     - a hard coded set of presentation styles (JSON) that the LLM can choose between
@@ -35,9 +59,3 @@ BACKEND:
 - If working on graph style presentations 
     - IDK YET
 
-----------------------------------------------------------------------------------
-How Claude Gamma seems to work
-- reads document or prompt
-- summarizes the content into slide ready points
-- creates a .pptx file presentation
-- follows user instructions for number of slides, structure, simple layout instructions

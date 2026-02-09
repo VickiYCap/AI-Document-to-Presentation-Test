@@ -12,4 +12,6 @@
 .parsed-data{
     padding: 5%;
     color: black;
+    white-space: pre-wrap;
+    margin-bottom: 16px;
 }

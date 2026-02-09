@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from extractor import parse_pdf_bytes 
+from extractor import chunk_text
 
 app = FastAPI()
 
@@ -38,9 +39,14 @@ async def upload(file: UploadFile = File(...)):
     if not text.strip():
         raise HTTPException(status_code=422, detail="No extractable text (maybe a scanned PDF)")
 
+    chunks = list(chunk_text(text, max_chars=2000, overlap=200))
+
+
+    formatted = "\n\n--- CHUNK ---\n\n".join(chunks)
+
     return JSONResponse({
         "ok": True,
         "filename": file.filename,
-        "length": len(text),
-        "text": text
+        "length": len(chunks),
+        "text": formatted
     })

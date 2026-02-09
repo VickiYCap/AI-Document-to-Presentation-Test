@@ -9,10 +9,11 @@ function Testing() {
   
   return (
     <div className="testing-container">
-      <h2> This is the scraped data from the uploaded file:</h2>
-      <p className="parsed-data">
-        {JSON.stringify(parsedData, null, 2)}
-      </p>
+      <h2>This is the scraped data from the uploaded file:</h2>
+
+      <pre className="parsed-data">
+        {parsedData?.text}
+      </pre>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Optional
+from typing import List, Iterator
 from pdfminer.high_level import extract_text
 from pdfminer.layout import LAParams
 
@@ -20,3 +20,65 @@ def parse_pdf_bytes(pdf_bytes: bytes,
     )
     text = extract_text(BytesIO(pdf_bytes), laparams=laparams)
     return text or ""
+
+from typing import Iterator, List
+
+# Splits text into word-safe chunks up to `max_chars`, never cutting words.
+# Adds optional overlap by prepending a small tail of words from the previous
+# chunk to the next one to preserve context.
+def chunk_text(text: str, max_chars: int = 2000, overlap: int = 200) -> Iterator[str]:
+    if not text:
+        return
+    if max_chars <= 0:
+        raise ValueError("max_chars must be > 0")
+    if overlap >= max_chars:
+        overlap = max_chars // 4
+
+    words = text.split()
+    if not words:
+        return
+
+    chunks: List[str] = []
+    current: List[str] = []
+    current_len = 0
+
+    for w in words:
+        next_len = current_len + (1 if current else 0) + len(w)
+        if next_len <= max_chars:
+            current.append(w)
+            current_len = next_len
+        else:
+            if current:
+                chunks.append(" ".join(current))
+            current = [w]
+            current_len = len(w)
+
+    if current:
+        chunks.append(" ".join(current))
+
+    if overlap <= 0 or len(chunks) <= 1:
+        yield from chunks
+        return
+
+    prev = chunks[0]
+    yield prev
+
+    for ch in chunks[1:]:
+        tail = _tail_words_by_chars(prev.split(), overlap)
+        yield " ".join(tail + ch.split()) if tail else ch
+        prev = ch
+
+
+# Returns the last few words from a list that fit within `budget` characters.
+# Used to create word-safe overlap between chunks
+def _tail_words_by_chars(words: List[str], budget: int) -> List[str]:
+    tail: List[str] = []
+    total = 0
+    for word in reversed(words):
+        add = len(word) + (1 if tail else 0)
+        if total + add > budget:
+            break
+        tail.append(word)
+        total += add
+    tail.reverse()
+    return tail
