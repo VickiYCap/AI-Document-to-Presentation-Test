@@ -29,10 +29,6 @@ from typing import Iterator, List
 def chunk_text(text: str, max_chars: int = 2000, overlap: int = 200) -> Iterator[str]:
     if not text:
         return
-    if max_chars <= 0:
-        raise ValueError("max_chars must be > 0")
-    if overlap >= max_chars:
-        overlap = max_chars // 4
 
     words = text.split()
     if not words:
