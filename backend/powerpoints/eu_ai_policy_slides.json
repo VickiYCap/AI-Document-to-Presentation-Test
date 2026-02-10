@@ -1,0 +1,27 @@
+{
+  "title": "EU AI Policy",
+  "company": "Capgemini",
+  "motto": "Make it Real!",
+
+  "subtitle": "Risk-Based Approach & Roles",
+  "bullets1_1": "Unacceptable risk is prohibited (e.g., social scoring, manipulative AI)",
+  "bullets1_2": "High-risk systems are regulated with stringent obligations",
+  "bullets1_3": "Limited and minimal risk have lighter or no obligations",
+  "bullets2_1": "Providers (developers) bear most obligations for high‑risk AI",
+  "bullets2_2": "Deployers have obligations when using high‑risk AI",
+  "bullets2_3": "GPAI model providers must document, respect copyright, and publish training‑data summaries",
+
+  "subtitle2": "GPAI & Compliance",
+  "bullets3_1": "Technical documentation and information for downstream providers",
+  "bullets3_2": "Copyright compliance and training‑data summary publication",
+  "bullets3_3": "Additional duties (evaluations, incident reporting, cybersecurity) for systemic models",
+  "table1": "Biometrics — Remote biometric identification",
+  "table2": "Employment — Candidate screening & performance monitoring",
+  "table3": "Education — Admission and outcome evaluation",
+  "table4": "Critical infrastructure — Traffic and utilities management",
+
+  "subtitle3": "Key Takeaways",
+  "bullets4_1": "Map your AI portfolio to risk tiers and Annex categories",
+  "bullets4_2": "Establish quality, oversight, and documentation workflows",
+  "bullets4_3": "Prepare for GPAI transparency and potential systemic‑risk duties"
+}

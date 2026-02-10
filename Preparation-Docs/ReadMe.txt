@@ -14,10 +14,6 @@ Running the Backend:
     3. .venv\Scripts\Activate.ps1
 
 - install pdfminer
-    - pip install pdfminer.six
--install fastapi and uvicorn
-    - pip install fastapi uvicorn
--install python-multipart
-    - pip install python-multipart
+    - pip install pdfminer.six fastapi uvicorn python-multipart python-pptx
 
 - uvicorn main:app --reload --port 8000

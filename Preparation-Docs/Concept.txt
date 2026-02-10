@@ -20,6 +20,7 @@ How Claude Gamma seems to work
 - Backend recieves the document and scrapes it
 - Preprocessing needed to break the scraped text into chunks with meta data
 
+- openai models 4o mini
 - prompt the LLM to break down the chunked information into nodes and edges (relational graph info)
     -Ex: Extract all entities and relationships from the text. 
         Output in triples of (subject, relation, object). 
