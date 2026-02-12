@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 from pptx import Presentation
+import comtypes.client
+import os
 
 # Case-insensitive token pattern: {{ anything }}
 TOKEN_REGEX = re.compile(r"{{(.*?)}}", re.IGNORECASE)
@@ -61,6 +63,21 @@ def load_flat_tokens(json_path_or_dict):
     with open(json_path_or_dict, "r", encoding="utf-8") as f:
         return json.load(f)
 
+#convert pptx to pdf for rendering  
+def pptx_to_pdf(input_path):
+    output_path = os.path.splitext(input_path)[0] + ".pdf"
+
+    powerpoint = comtypes.client.CreateObject("Powerpoint.Application")
+    powerpoint.Visible = 1
+
+    presentation = powerpoint.Presentations.Open(os.path.abspath(input_path))
+    presentation.SaveAs(os.path.abspath(output_path), 32)
+    presentation.Close()
+
+    powerpoint.Quit()
+
+    return output_path
+
 def main():
     BASE = Path(__file__).resolve().parent
     powerpoints_dir = BASE.parent if (BASE / "powerpoints").exists() else BASE  # adjust if needed
@@ -93,6 +110,7 @@ def main():
     # Save output (template remains untouched)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pres.save(str(output_path))
+    pptx_to_pdf(str(output_path))
 
     print(f"\nReplacements made: {replaced}")
     if missing:

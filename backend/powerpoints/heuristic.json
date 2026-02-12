@@ -1,0 +1,40 @@
+{
+  "slides": [
+    {
+      "title": "Why You Should Choose Adidas",
+      "regular_text": [
+        "Adidas",
+        "Impossible is Nothing"
+      ]
+    },
+    {
+      "title": "Designed for Everyday Comfort",
+      "bullets": [
+        "Soft midsoles for a smooth, cushioned feel",
+        "Lightweight construction ideal for daily wear",
+        "Breathable fabrics to keep your feet cool and dry",
+        "Perfect for school, training, or casual activities",
+        "Built with durable materials for long-lasting performance",
+        "Flexible outsoles that support natural movement"
+      ]
+    },
+    {
+      "title": "A Global Brand You Know and Trust",
+      "bullets": [
+        "Modern styles inspired by sport culture",
+        "A wide range of colors, fits, and designs",
+        "Easy to pair with almost any outfit",
+        "Iconic three-stripes identity recognized worldwide"
+      ]
+    },
+    {
+      "title": "Quality That Stands Out",
+      "bullets": [
+        "Premium materials made to last",
+        "Reliable traction and support for all-day wear",
+        "One of the most trusted athletic brands globally",
+        "Exceptional value backed by decades of innovation"
+      ]
+    }
+  ]
+}
