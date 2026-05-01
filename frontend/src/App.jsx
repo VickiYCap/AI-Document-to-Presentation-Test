@@ -3,43 +3,30 @@ import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { DataContext } from './DataContext';
 
-import Homepage from './components/Homepage';       
-import PolicyGraph from './components/PolicyGraph'; 
-import Presentation from './components/Presentation';
-import Testing from './components/Testing';
+import Homepage from './components/Homepage';
+import Powerpoint from './components/Powerpoint';
 
-
-function Blank() {
-  return(
-    <div className="landing-container">
-      <h1>
-        Ready to Create? 
-      </h1>
-      <h3> Upload a file to start or ask a question to start</h3>
-    </div>
-  )
-};
 
 function App() {
-  const [parsedData, setParsedData] = useState(null);
+  const [templateImages, setTemplateImages] = useState(null);
+  const [imageReplacements, setImageReplacements] = useState({});
+  const [pdfFile, setPdfFile] = useState(null);
+  const [pptxFile, setPptxFile] = useState(null);
+  const [stylePrompt, setStylePrompt] = useState('');
 
   return (
-    <DataContext.Provider value={{ parsedData, setParsedData }}>
+    <DataContext.Provider value={{
+      templateImages, setTemplateImages,
+      imageReplacements, setImageReplacements,
+      pdfFile, setPdfFile,
+      pptxFile, setPptxFile,
+      stylePrompt, setStylePrompt,
+    }}>
       <Router>
-        <div className="app-container">
-          <aside className="ai-agent">
-            <Homepage />
-          </aside>
-
-          <main className="active-tab-container">
-            <Routes>
-              <Route path="/" element={<Blank />} />
-              <Route path="/policy-graph" element={<PolicyGraph />} />
-              <Route path="/presentation" element={<Presentation />} />
-              <Route path="/testing" element={<Testing />} />
-            </Routes>
-          </main>
-        </div>
+        <Routes>
+          <Route path="/" element={<Homepage />} />
+          <Route path="/presentation" element={<Powerpoint />} />
+        </Routes>
       </Router>
     </DataContext.Provider>
   );
