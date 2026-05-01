@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "pptxgenjs": "^4.0.1",
+    "react-router-dom": "^7.14.2"
+  }
+}
