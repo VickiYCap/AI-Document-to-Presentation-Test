@@ -2,6 +2,8 @@ import pymupdf
 import json
 import statistics
 import re
+import os
+import tempfile
 
 # -----------------------------
 # Parsing functions
@@ -338,6 +340,56 @@ def extract_text(fname):
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     return output
+
+def extract_images(fname):
+    doc = pymupdf.open(fname)
+    tmp_dir = tempfile.mkdtemp(prefix="doc_images_")
+
+    # Collect smask xrefs from all pages — alpha channels, not content images
+    smask_xrefs = set()
+    for page in doc:
+        for img in page.get_images(full=True):
+            if img[1] > 0:
+                smask_xrefs.add(img[1])
+
+    images = []
+    seen_xrefs = set()
+
+    # Scan every xref in the document for Image XObjects. This catches images
+    # nested inside Form XObjects that page.get_images() misses.
+    for xref in range(1, doc.xref_length()):
+        if not doc.xref_is_stream(xref):
+            continue
+        obj_str = doc.xref_object(xref)
+        if "/Subtype /Image" not in obj_str and "/Subtype/Image" not in obj_str:
+            continue
+        if xref in seen_xrefs or xref in smask_xrefs:
+            continue
+        seen_xrefs.add(xref)
+
+        try:
+            base_image = doc.extract_image(xref)
+        except Exception:
+            continue
+
+        if base_image["width"] < 50 or base_image["height"] < 50:
+            continue
+
+        filename = f"img_{xref}.{base_image['ext']}"
+        path = os.path.join(tmp_dir, filename)
+        with open(path, "wb") as f:
+            f.write(base_image["image"])
+        images.append({
+            "xref": xref,
+            "width": base_image["width"],
+            "height": base_image["height"],
+            "bpc": base_image["bpc"],
+            "colorspace": base_image["colorspace"],
+            "ext": base_image["ext"],
+            "path": path,
+        })
+
+    return {"tmp_dir": tmp_dir, "images": images}
 
 
 if __name__ == "__main__":

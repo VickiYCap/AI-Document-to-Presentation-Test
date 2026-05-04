@@ -1,17 +1,21 @@
 import { useContext, useState } from 'react';
-import './Powerpoint.css';
+import { useNavigate } from 'react-router-dom';
 import { HiPresentationChartBar } from "react-icons/hi";
 import { FaFilePdf, FaFilePowerpoint, FaImage } from 'react-icons/fa';
+import { IoCaretBack } from "react-icons/io5";
 import { DataContext } from '../DataContext';
 
 function Powerpoint() {
-    const { pdfFile, pptxFile, templateImages, imageReplacements, setImageReplacements, stylePrompt } = useContext(DataContext);
+    const { pdfFile, pptxFile, templateImages, imageReplacements, setImageReplacements, stylePrompt, pdfImages } = useContext(DataContext);
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [picker, setPicker] = useState(null); // { slideIndex, shapeId } | null
     const [generatedSlides, setGeneratedSlides] = useState([]);
     const [pptxDownloadUrl, setPptxDownloadUrl] = useState(null);
     const [pdfDownloadUrl, setPdfDownloadUrl] = useState(null);
 
+    //Helper function to create downloadable urls
     function b64toBlob(b64, mime) {
         const bytes = atob(b64);
         const arr = new Uint8Array(bytes.length);
@@ -19,6 +23,7 @@ function Powerpoint() {
         return new Blob([arr], { type: mime });
     }
 
+    //function to generate the actual slides
     async function handleGenerate() {
         setError(null);
         setPptxDownloadUrl(null);
@@ -71,6 +76,16 @@ function Powerpoint() {
         }));
     }
 
+    function selectPdfImage(img) {
+        const mime = `image/${img.ext}`;
+        const bytes = atob(img.base64);
+        const arr = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+        const file = new File([new Blob([arr], { type: mime })], `doc_img_${img.xref}.${img.ext}`, { type: mime });
+        handleReplace(picker.slideIndex, picker.shapeId, file);
+        setPicker(null);
+    }
+
     function handleRemove(slideIndex, shapeId) {
         setImageReplacements(prev => {
             const next = { ...prev };
@@ -82,80 +97,99 @@ function Powerpoint() {
     const totalReplacements = Object.keys(imageReplacements).length;
 
     return (
-        <div className="powerpoint-container">
-            <div className='generation-info'>
-                <div className='header'>
-                    <div className='header-title'>
+        <>
+        <div className="flex flex-row h-screen w-full bg-[#F7F8FC]">
+            <div className='flex flex-col flex-[0_0_30%] h-screen px-5 py-6 overflow-y-auto text-[#3a4878] bg-[#F7F8FC] border-r border-[#dde1ec] box-border items-center'>
+
+                {/**----Back Button to Home Page----  */}
+                <button className='flex items-center justify-center bg-transparent border-0 text-[#1575DB] cursor-pointer self-start mb-4 p-0 opacity-80 transition-opacity duration-150 hover:opacity-100' onClick={() => navigate('/')}>
+                    <IoCaretBack size={32} />
+                    Back
+                </button>
+
+                {/**----  Header for the application name----*/}
+                <div className='text-center'>
+                    <div className='flex flex-row items-center gap-[10px] ml-[10px] mb-[10px]'>
                         <HiPresentationChartBar size={32} style={{ color: "#1575DB" }} />
-                        <h1>Turn Any Document into a Presentation</h1>
+                        <h1 className='text-[1.4rem] font-normal text-[#3a4878] mt-0 mb-[2px]'>Turn Any Document into a Presentation</h1>
                     </div>
-                    <p>Before we generate your presentation, feel free to replace images on any slide.</p>
+                    <p className='text-[0.8rem] text-[#666] m-0'>Before we generate your presentation, feel free to replace images on any slide.</p>
                 </div>
 
-                <div className='file-container'>
-                    <FaFilePdf size={32} style={{ color: "#1575DB", marginTop: "20px" }} className='upload-icon' />
+                {/**----  Display All Provided Information ---- */}
+                <div className='flex flex-row bg-[#F7F8FC] border border-[#1575DB] rounded-[10px] m-[10px] px-5 py-[10px] w-[350px] items-center gap-[10px]'>
+                    <FaFilePdf size={32} style={{ color: "#1575DB", marginTop: "20px" }} />
                     <div>{pdfFile ? pdfFile.name : 'No file uploaded'}</div>
                 </div>
-                <div className='file-container'>
-                    <FaFilePowerpoint size={32} style={{ color: "#1575DB", marginTop: "20px" }} className='upload-icon' />
+                <div className='flex flex-row bg-[#F7F8FC] border border-[#1575DB] rounded-[10px] m-[10px] px-5 py-[10px] w-[350px] items-center gap-[10px]'>
+                    <FaFilePowerpoint size={32} style={{ color: "#1575DB", marginTop: "20px" }} />
                     <div>{pptxFile ? pptxFile.name : 'No template uploaded'}</div>
                 </div>
 
+                <div className='flex flex-col gap-[10px] m-[10px]'>
+                    <h1 className='text-[1.1rem] text-[#1575DB] ml-3'> Prompt: </h1>
+                    <div className='flex flex-row bg-[#F7F8FC] border border-[#1575DB] rounded-[10px] m-[10px] px-5 py-[10px] w-[350px] items-center gap-[10px] italic'>
+                        <div>{stylePrompt || 'No prompt provided'}</div>
+                    </div>
+                </div>
+
+                {/** ---- image replacement ---- */}
                 {totalReplacements > 0 && (
-                    <div className='replacement-summary'>
+                    <div className='flex items-center gap-2 bg-[#e8f1fb] border border-[#1575DB] rounded-lg px-[14px] py-2 m-[10px] text-[0.85rem] text-[#1575DB] font-medium w-[322px]'>
                         <FaImage size={16} style={{ color: "#e53935" }} />
                         <span>{totalReplacements} image{totalReplacements > 1 ? 's' : ''} queued for replacement</span>
                     </div>
                 )}
 
-                <p className='info-hint'>
+                <p className='text-[0.78rem] text-[#888] text-center px-3 leading-[1.5] mt-3'>
                     Hover over highlighted regions on any slide to replace its image. Slides without images are shown for reference only.
                 </p>
 
-                <button onClick={handleGenerate} disabled={loading} className='generate-btn'>
+                <button onClick={handleGenerate} disabled={loading} className='mt-4 px-[30px] py-3 bg-[#1575DB] text-white border-2 border-[#1575DB] rounded-lg cursor-pointer text-base w-[350px] hover:bg-white hover:text-[#1575DB] disabled:opacity-60 disabled:cursor-not-allowed'>
                     {loading ? 'Generating…' : 'Generate'}
                 </button>
 
-                {error && <p className='generate-error'>{error}</p>}
+                {error && <p className='text-red-500 text-[0.82rem] text-center mt-2'>{error}</p>}
 
                 {pptxDownloadUrl && (
-                    <a href={pptxDownloadUrl} download="presentation.pptx" className='download-link'>
+                    <a href={pptxDownloadUrl} download="presentation.pptx" className='block text-center mt-[10px] text-[#1575DB] text-[0.9rem] font-semibold underline'>
                         ⬇ Download PPTX
                     </a>
                 )}
                 {pdfDownloadUrl && (
-                    <a href={pdfDownloadUrl} download="presentation.pdf" className='download-link'>
+                    <a href={pdfDownloadUrl} download="presentation.pdf" className='block text-center mt-[10px] text-[#1575DB] text-[0.9rem] font-semibold underline'>
                         ⬇ Download PDF
                     </a>
                 )}
             </div>
 
-            <div className='powerpoint-display'>
+            {/**----  Display Slide Template and Generated Slides---- */}
+            <div className='flex-[0_0_70%] h-screen overflow-y-auto bg-[#c9cace] box-border p-6'>
                 {generatedSlides.length > 0 ? (
-                    <div className='slides-grid'>
+                    <div className='flex flex-col gap-6'>
                         {generatedSlides.map((slide) => (
-                            <div key={slide.slide_index} className='slide-thumb-card'>
-                                <div className='slide-thumb-label'>Slide {slide.slide_index + 1}</div>
-                                <div className='slide-thumb-wrapper'>
+                            <div key={slide.slide_index} className='bg-white rounded-[10px] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.15)]'>
+                                <div className='text-[0.75rem] font-semibold text-[#3a4878] px-[10px] py-[6px] bg-[#f0f2f8] border-b border-[#dde1ec]'>Slide {slide.slide_index + 1}</div>
+                                <div className='relative w-full leading-[0]'>
                                     <img
                                         src={slide.thumbnail}
                                         alt={`Slide ${slide.slide_index + 1}`}
-                                        className='slide-thumb-img'
+                                        className='w-full block'
                                     />
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : templateImages ? (
-                    <div className='slides-grid'>
+                    <div className='flex flex-col gap-6'>
                         {templateImages.map((slide) => (
-                            <div key={slide.slide_key} className='slide-thumb-card'>
-                                <div className='slide-thumb-label'>Slide {slide.slide_index + 1}</div>
-                                <div className='slide-thumb-wrapper'>
+                            <div key={slide.slide_key} className='bg-white rounded-[10px] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.15)]'>
+                                <div className='text-[0.75rem] font-semibold text-[#3a4878] px-[10px] py-[6px] bg-[#f0f2f8] border-b border-[#dde1ec]'>Slide {slide.slide_index + 1}</div>
+                                <div className='relative w-full leading-[0]'>
                                     <img
                                         src={slide.thumbnail}
                                         alt={`Slide ${slide.slide_index + 1}`}
-                                        className='slide-thumb-img'
+                                        className='w-full block'
                                     />
                                     {slide.images.map((img) => {
                                         const key = `${slide.slide_index}_${img.shape_id}`;
@@ -163,7 +197,11 @@ function Powerpoint() {
                                         return (
                                             <div
                                                 key={img.shape_id}
-                                                className={`image-overlay-box${replacement ? ' replaced' : ''}`}
+                                                className={`absolute box-border flex items-center justify-center cursor-pointer transition-colors duration-150 group ${
+                                                    replacement
+                                                        ? 'border-4 border-[#28a745] bg-transparent'
+                                                        : 'border-4 border-dashed border-[#e53935] bg-[rgba(229,57,53,0.08)] hover:bg-[rgba(229,57,53,0.18)]'
+                                                }`}
                                                 style={{
                                                     left: `${img.left_pct * 100}%`,
                                                     top: `${img.top_pct * 100}%`,
@@ -172,29 +210,26 @@ function Powerpoint() {
                                                 }}
                                             >
                                                 {replacement ? (
-                                                    <div className='overlay-replaced'>
+                                                    <div className='relative w-full h-full'>
                                                         <img
                                                             src={URL.createObjectURL(replacement.file)}
                                                             alt="replacement"
-                                                            className='overlay-preview-img'
+                                                            className='w-full h-full object-cover block rounded-[2px]'
                                                         />
                                                         <button
-                                                            className='overlay-remove-btn'
+                                                            className='absolute top-[3px] right-[3px] w-5 h-5 rounded-full border-0 bg-[rgba(0,0,0,0.55)] text-white text-[0.85rem] leading-[1] cursor-pointer flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100'
                                                             onClick={() => handleRemove(slide.slide_index, img.shape_id)}
                                                             title="Remove replacement"
                                                         >×</button>
                                                     </div>
                                                 ) : (
-                                                    <label className='overlay-upload-label'>
-                                                        <input
-                                                            type="file"
-                                                            accept="image/*"
-                                                            style={{ display: 'none' }}
-                                                            onChange={(e) => handleReplace(slide.slide_index, img.shape_id, e.target.files[0])}
-                                                        />
-                                                        <FaImage size={14} />
-                                                        <span>Replace</span>
-                                                    </label>
+                                                    <div
+                                                        className='flex flex-col items-center justify-center gap-1 text-[#e53935] text-[0.7rem] font-semibold cursor-pointer w-full h-full opacity-0 transition-opacity duration-150 group-hover:opacity-100'
+                                                        onClick={() => setPicker({ slideIndex: slide.slide_index, shapeId: img.shape_id })}
+                                                    >
+                                                        <FaImage size={52} />
+                                                        <div className='text-[18px]'>Replace</div>
+                                                    </div>
                                                 )}
                                             </div>
                                         );
@@ -204,10 +239,57 @@ function Powerpoint() {
                         ))}
                     </div>
                 ) : (
-                    <p className='no-template-msg'>No template selected — upload a PPTX on the home page first.</p>
+                    <p className='text-[#888] text-[0.95rem] text-center mt-10'>No template selected — upload a PPTX on the home page first.</p>
                 )}
             </div>
         </div>
+
+        {picker && (
+            <div className='fixed inset-0 bg-[rgba(0,0,0,0.45)] flex items-center justify-center z-[1000]' onClick={() => setPicker(null)}>
+                <div className='bg-white rounded-[12px] w-[480px] max-h-[80vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.22)] flex flex-col' onClick={e => e.stopPropagation()}>
+                    <div className='flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#e8eaf0] text-base font-semibold text-[#3a4878]'>
+                        <span>Choose an image</span>
+                        <button className='bg-transparent border-0 text-[1.4rem] leading-[1] cursor-pointer text-[#888] px-1 hover:text-[#333]' onClick={() => setPicker(null)}>×</button>
+                    </div>
+
+                    {pdfImages && pdfImages.length > 0 && (
+                        <div className='px-5 py-[14px]'>
+                            <div className='text-[0.7rem] font-bold uppercase tracking-[0.06em] text-[#999] mb-[10px]'>From document</div>
+                            <div className='grid grid-cols-3 gap-2'>
+                                {pdfImages.map(img => (
+                                    <img
+                                        key={img.xref}
+                                        src={`data:image/${img.ext};base64,${img.base64}`}
+                                        className='w-full aspect-[4/3] object-cover rounded-md cursor-pointer border-2 border-transparent transition-[border-color,transform] duration-150 hover:border-[#1575DB] hover:scale-[1.03]'
+                                        alt={`doc image ${img.xref}`}
+                                        onClick={() => selectPdfImage(img)}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className={`px-5 py-[14px]${pdfImages && pdfImages.length > 0 ? ' border-t border-[#e8eaf0]' : ''}`}>
+                        <div className='text-[0.7rem] font-bold uppercase tracking-[0.06em] text-[#999] mb-[10px]'>Upload your own</div>
+                        <label className='inline-block px-[18px] py-2 bg-[#1575DB] text-white rounded-md text-[0.85rem] font-medium cursor-pointer transition-colors duration-150 hover:bg-[#3a4878]'>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                className='hidden'
+                                onChange={e => {
+                                    if (e.target.files[0]) {
+                                        handleReplace(picker.slideIndex, picker.shapeId, e.target.files[0]);
+                                        setPicker(null);
+                                    }
+                                }}
+                            />
+                            Choose file…
+                        </label>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 }
 

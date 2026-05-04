@@ -10,4 +10,6 @@ export const DataContext = createContext({
     setPptxFile: () => {},
     stylePrompt: '',
     setStylePrompt: () => {},
+    pdfImages: null,
+    setPdfImages: () => {},
 });

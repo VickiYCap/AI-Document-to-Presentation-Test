@@ -393,29 +393,30 @@ def replace_image(shape, path: str):
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Image not found: {path}")
 
+    sp_tree = shape._element.getparent()
+    old_idx = list(sp_tree).index(shape._element)
+
     if is_picture_placeholder(shape):
         try:
-            pic = shape.insert_picture(path)
-            send_to_back(pic)
-            return pic
-        except Exception as e:
+            return shape.insert_picture(path)
+        except Exception:
             slide = shape.part.slide
             new_pic = slide.shapes.add_picture(path, shape.left, shape.top, width=shape.width, height=shape.height)
             try:
-                sp = shape._element
-                sp.getparent().remove(sp)
+                sp_tree.remove(shape._element)
             except Exception:
                 pass
-            send_to_back(new_pic)
+            sp_tree.remove(new_pic._element)
+            sp_tree.insert(old_idx, new_pic._element)
             return new_pic
 
     if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
         slide = shape.part.slide
         left, top, width, height = shape.left, shape.top, shape.width, shape.height
         new_pic = slide.shapes.add_picture(path, left, top, width=width, height=height)
-        old_sp = shape._element
-        old_sp.getparent().remove(old_sp)
-        send_to_back(new_pic)
+        sp_tree.remove(shape._element)
+        sp_tree.remove(new_pic._element)
+        sp_tree.insert(old_idx, new_pic._element)
         return new_pic
 
     raise TypeError("Target shape is neither a picture placeholder nor a picture shape.")

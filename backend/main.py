@@ -1,7 +1,11 @@
+import base64
 import json
+import shutil
 import tempfile
 import os
 import traceback
+import fitz
+from pptxtopdf import convert
 from pathlib import Path
 
 from dotenv import load_dotenv, find_dotenv
@@ -13,8 +17,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from typing import List, Optional
 
 from backend.json_creator import get_filler_json, check_blanks, count_schema_elements
-from backend.parser import extract_text
-from backend.presentation_creator import apply_json_to_pptx, build_presentation_mapping
+from backend.document_parser import extract_images, extract_text
+from backend.pptx_parser import apply_json_to_pptx, build_presentation_mapping
 
 app = FastAPI()
 
@@ -47,10 +51,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.post("/analyze-template")
 async def analyze_template(pptx_file: UploadFile = File(...)):
-    import fitz
-    import base64
-    from pptxtopdf import convert
-
     contents = await pptx_file.read()
 
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
@@ -83,6 +83,34 @@ async def analyze_template(pptx_file: UploadFile = File(...)):
         doc.close()
 
     return JSONResponse({"slides": slides})
+
+
+@app.post("/pdf-images")
+async def pdf_images(pdf_file: UploadFile = File(...)):
+    contents = await pdf_file.read()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_f:
+        tmp_f.write(contents)
+        tmp_pdf = tmp_f.name
+    tmp_dir = None
+    try:
+        result = extract_images(tmp_pdf)
+        tmp_dir = result["tmp_dir"]
+        images = []
+        for img in result["images"]:
+            with open(img["path"], "rb") as f:
+                data = f.read()
+            images.append({
+                "xref": img["xref"],
+                "width": img["width"],
+                "height": img["height"],
+                "ext": img["ext"],
+                "base64": base64.b64encode(data).decode(),
+            })
+        return JSONResponse({"images": images})
+    finally:
+        os.unlink(tmp_pdf)
+        if tmp_dir:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @app.post("/generate")
@@ -142,10 +170,6 @@ async def generate(
             pptx_bytes = f.read()
 
     # Convert the generated PPTX to PDF in a clean temp dir (avoids converting the template too)
-    import fitz
-    import base64
-    from pptxtopdf import convert
-
     slides = []
     pdf_bytes = None
 

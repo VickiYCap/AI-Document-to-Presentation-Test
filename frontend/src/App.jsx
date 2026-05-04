@@ -1,4 +1,3 @@
-import './App.css';
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { DataContext } from './DataContext';
@@ -13,6 +12,7 @@ function App() {
   const [pdfFile, setPdfFile] = useState(null);
   const [pptxFile, setPptxFile] = useState(null);
   const [stylePrompt, setStylePrompt] = useState('');
+  const [pdfImages, setPdfImages] = useState(null);
 
   return (
     <DataContext.Provider value={{
@@ -21,6 +21,7 @@ function App() {
       pdfFile, setPdfFile,
       pptxFile, setPptxFile,
       stylePrompt, setStylePrompt,
+      pdfImages, setPdfImages,
     }}>
       <Router>
         <Routes>

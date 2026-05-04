@@ -23,9 +23,9 @@ from backend.llm_api.llm_init import LLMService, LLMConfig
 import logging
 from logging.handlers import WatchedFileHandler
 
-from .presentation_creator import apply_json_to_pptx, build_presentation_mapping
+from .pptx_parser import apply_json_to_pptx, build_presentation_mapping
 from .prompts import CREATE_FILLER, CHECK_BLANKS, FILL_TABLE
-from .parser import extract_text
+from .document_parser import extract_text
 
 
 #=================================
@@ -334,7 +334,7 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
         max_tokens=8000,
         provider="anthropic",
         host_provider="anthropic",
-        model="claude-haiku-4-6"
+        model="claude-haiku-4-5-20251001"
     )
     llm = LLMService(cfg, logger=pg_logger)
 
@@ -545,7 +545,7 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
         max_tokens=2000,
         provider="anthropic",
         host_provider="anthropic",
-        model="claude-sonnet-4-6"
+        model="claude-3-5-haiku-20241022"
     )
     topics_llm = LLMService(topics_cfg, logger=pg_logger)
 
@@ -603,6 +603,9 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
     system_prompt_tables = FILL_TABLE
     slide_table_json: List[Dict[str, Any]] = []
     for idx in range(len(slides_out)):
+        if not table_schema_only[idx]:
+            slide_table_json.append({"table": []})
+            continue
         per_slide_payload = {
             "table_schema": table_schema_only[idx],
             "table_hints": table_hints[idx],
@@ -779,7 +782,7 @@ def check_blanks(parsed: Dict[str, Any], filler_json: Dict[str, Any]) -> Dict[st
         max_tokens=3000,
         provider="anthropic",
         host_provider="anthropic",
-        model="claude-sonnet-4-6"
+        model="claude-3-5-haiku-20241022"
     )
     llm = LLMService(cfg, logger=pg_logger)
 
