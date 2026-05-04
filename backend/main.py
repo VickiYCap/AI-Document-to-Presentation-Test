@@ -1,3 +1,4 @@
+"""Main file for FastAPI backend handling PPTX analysis and generation."""
 import base64
 import json
 import shutil
