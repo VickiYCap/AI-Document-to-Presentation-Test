@@ -1,12 +1,15 @@
+"""Parses PDF documents to extract text, tables, and images, and organizes them into a structured JSON format."""
+
 import pymupdf
 import json
 import statistics
 import re
 import os
 import tempfile
+import sys
 
 # -----------------------------
-# Parsing functions
+# Parsing tables
 # -----------------------------
 def find_nested_table(page):
     outer = page.find_table()
@@ -23,36 +26,40 @@ def find_nested_table(page):
 
     return real_table
 
-def get_article_title(doc):
-    page = doc[0]
-    blocks = page.get_text("dict")["blocks"]
 
-    candidates = []
-    for b in blocks:
-        if b["type"] != 0:
-            continue
-        for line in b["lines"]:
-            for span in line["spans"]:
-                text = span["text"].strip()
-                if 5 < len(text) < 200:
-                    candidates.append((span["size"], text))
-    if not candidates:
-        return None
+# def get_article_title(doc):
+#     page = doc[0]
+#     blocks = page.get_text("dict")["blocks"]
 
-    # return largest-font candidate
-    candidates.sort(reverse=True)  # largest font first
-    return candidates[0][1]
+#     candidates = []
+#     for b in blocks:
+#         if b["type"] != 0:
+#             continue
+#         for line in b["lines"]:
+#             for span in line["spans"]:
+#                 text = span["text"].strip()
+#                 if 5 < len(text) < 200:
+#                     candidates.append((span["size"], text))
+#     if not candidates:
+#          return None
 
-def is_title(text: str) -> bool:
-    t = text.strip()
-    if len(t) > 140:
-        return False
-    if t.count(".") > 1:
-        return False
-    if re.match(r"^(figure|table)\s+\d+", t.lower()):
-        return False
-    return True
+#     # return largest-font candidate
+#     candidates.sort(reverse=True)  # largest font first
+#     return candidates[0][1]
 
+# def is_title(text: str) -> bool:
+#     t = text.strip()
+#     if len(t) > 140:
+#         return False
+#     if t.count(".") > 1:
+#         return False
+#     if re.match(r"^(figure|table)\s+\d+", t.lower()):
+#         return False
+#     return True
+
+# ---------------------------------------------------------------------------------------
+# Classifies the text into title,bullet, or paragraph before going to the json
+# ---------------------------------------------------------------------------------------
 def classify_block(text, avg_font_size, body_font):
     big_font = avg_font_size >= body_font * 1.20
 
@@ -61,12 +68,15 @@ def classify_block(text, avg_font_size, body_font):
         len(text) > 180 or punctuation >= 3
     )
 
-    if big_font and is_title(text) and not is_paragraphish:
+    if big_font and not is_paragraphish:
         return "title"
     elif "•" in text:
         return "bullet"
     return "paragraph"
 
+# --------------------------------------------------------
+# Separates bullet points so they are not saved as 1 text
+# --------------------------------------------------------
 def split_bullets(elements):
     out = []
     for e in elements:
@@ -83,6 +93,9 @@ def split_bullets(elements):
             out.append(e)
     return out
 
+# -----------------------------
+# Builds JSON structure
+# -----------------------------
 def build_hierarchical_structure(parsed):
     elements = parsed["elements"]
     outline = []
@@ -110,34 +123,21 @@ def build_hierarchical_structure(parsed):
         return None
 
     def collect_consecutive_table(start_idx):
-        """
-        Collects one or more consecutive 'table' items starting from start_idx.
-        Returns: (table_payload_list, next_index)
-        Each item in table_payload_list is normalized to:
-        {
-          "caption": <str or None>,
-          "headers": <list or None>,
-          "rows": <list[list] or None>,
-          "raw": <original element object>  # fallback for consumers to access details
-        }
-        """
         table_payload = []
         j = start_idx
         while j < n and elements[j]["type"] == "table":
             e = elements[j]
-            # Some extractors put structured data in e["table"]; others embed in e["data"]
             table_obj = (
                 e.get("table")
                 or e.get("data")
-                or {}  # fallback to empty dict
+                or {} 
             )
 
-            # Normalize common fields if present
             payload = {
                 "caption": table_obj.get("caption") or e.get("caption"),
                 "headers": table_obj.get("headers") or e.get("headers"),
                 "rows": table_obj.get("rows") or e.get("rows"),
-                "raw": e  # keep full raw element for maximum fidelity/debugging
+                "raw": e  
             }
             table_payload.append(payload)
             j += 1
@@ -147,7 +147,7 @@ def build_hierarchical_structure(parsed):
         e = elements[i]
         text = e["text"].strip()
         t = e["type"]
-        font = e.get("avg_font_size", 0)  # be safe if missing
+        font = e.get("avg_font_size", 0) 
 
         if t == "title" and font >= 16:
             if current_section:
@@ -230,18 +230,15 @@ def build_hierarchical_structure(parsed):
             table_payload, next_idx = collect_consecutive_table(i)
 
             if current_subsection:
-                # Keep a dedicated key for table inside subsections
                 if "table" not in current_subsection:
                     current_subsection["table"] = []
                 current_subsection["table"].extend(table_payload)
             else:
-                # At the section level, we add structured table group entries
                 current_section["content"].append({"table": table_payload})
 
             i = next_idx
             continue
 
-        # Fallback: advance if element didn't match known types
         i += 1
 
     if current_section:
@@ -249,20 +246,14 @@ def build_hierarchical_structure(parsed):
 
     return outline
 
-
+# ---------------------------------------------------------------------------------
+# Extracts the metadata from document to use for title author, date and year
+# ---------------------------------------------------------------------------------
 def extract_metadata(doc):
     meta = doc.metadata or {}
     title = (meta.get("title") or "").strip()
     author = (meta.get("author") or "").strip()
     date = (meta.get("creationDate") or "").strip()
-
-    # Metadata title is reliable when present; fall back to visual heuristic
-    if not title:
-        title = get_article_title(doc) or ""
-        if title and not is_title(title):
-            title = ""
-
-    # creationDate format from PDF: "D:20231005120000+00'00'" — extract the year at minimum
     year = ""
     if date:
         m = re.search(r"D:(\d{4})(\d{2})?(\d{2})?", date)
@@ -280,7 +271,9 @@ def extract_metadata(doc):
         "date": year or None,
     }
 
-
+# ----------------------------
+# Extracts text from pdf file
+# ----------------------------
 def extract_text(fname):
     doc = pymupdf.open(fname)
     metadata = extract_metadata(doc)
@@ -341,11 +334,13 @@ def extract_text(fname):
 
     return output
 
+
+# ---------------------------------------------------------------------------
+# Extracts pdf images to be used later for image replacement options
+# ---------------------------------------------------------------------------
 def extract_images(fname):
     doc = pymupdf.open(fname)
     tmp_dir = tempfile.mkdtemp(prefix="doc_images_")
-
-    # Collect smask xrefs from all pages — alpha channels, not content images
     smask_xrefs = set()
     for page in doc:
         for img in page.get_images(full=True):
@@ -354,9 +349,6 @@ def extract_images(fname):
 
     images = []
     seen_xrefs = set()
-
-    # Scan every xref in the document for Image XObjects. This catches images
-    # nested inside Form XObjects that page.get_images() misses.
     for xref in range(1, doc.xref_length()):
         if not doc.xref_is_stream(xref):
             continue
@@ -393,7 +385,6 @@ def extract_images(fname):
 
 
 if __name__ == "__main__":
-    import sys
     if len(sys.argv) < 2:
         sys.exit(1)
     result = extract_text(sys.argv[1])

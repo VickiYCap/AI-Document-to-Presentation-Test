@@ -1,5 +1,10 @@
-# Analyzes the presentation template and then maps the JSON content to the correct shapes in the PPTX, including text, tables, and images. This is where the "magic" happens in terms of aligning the parsed content with the actual presentation structure.
-# The mapping is heuristic-based, relying on text size, position, and shape type to guess which shape is the title, which are subtitles, body text, tables, and images. It then provides functions to fill in text (with bullet support), tables, and replace images based on the JSON
+"""Analyzes the presentation template and then maps the JSON content to the correct shapes in the PPTX, 
+including text, tables, and images. This is where the "magic" happens in terms of aligning the parsed 
+content with the actual presentation structure. The mapping is heuristic-based, relying on text size, 
+position, and shape type to guess which shape is the title, which are subtitles, body text, tables, and 
+images. It then provides functions to fill in text (with bullet support), tables, and replace images
+based on the JSON"""
+
 from pptx import Presentation
 from pptx.oxml.ns import qn
 from pptx.oxml.xmlchemy import OxmlElement
@@ -12,9 +17,9 @@ import os
 from copy import deepcopy
 from pathlib import Path
 
-#----------------------------------------------------------- MAPPING ----------------------------------------------------------------------------------
-#CHECK IF A SHAPE CONTAINS BULLET POINTS
-
+# -----------------------------------------
+# Check if a paragraph space is bulleted
+# -----------------------------------------
 def has_bullets(paragraph) -> bool:
     pPr = paragraph._p.pPr
 
@@ -47,7 +52,9 @@ def build_body(shape):
 
     return body
 
-#HEURISTIC TO DEFINE THE TITLE VS NORMAL TEXT
+# -------------------------------------------------
+# USE HEURISTIC TO DEFINE THE TITLE VS NORMAL TEXT
+# -------------------------------------------------
 def get_text_size_weight(shape, default_min_pt=12.0) -> float:
     if not getattr(shape, "has_text_frame", False):
         return float(default_min_pt)
@@ -73,7 +80,9 @@ def get_text_size_weight(shape, default_min_pt=12.0) -> float:
 
     return max_weight_pt
 
-#COUNT HOW MANY PARAGRAPHS LINES IN A SHAPE
+# -------------------------------------------------
+# cOUNT THE NUMBERS OF PARAGRAPHS PER SHAPE
+# -------------------------------------------------
 def count_paragraphs(shape) -> int:
     if not getattr(shape, "has_text_frame", False):
         return 0
@@ -85,7 +94,9 @@ def count_paragraphs(shape) -> int:
 
     return count
 
-#GUESS WHICH TEXT IS THE TITLE
+# -------------------------------------------------
+# USE HEURISTIC TO GUESS WHAT THE TITLE IS IN A SLIDE
+# -------------------------------------------------
 def find_title(slide):
     candidates = []
     for shape in slide.shapes:
@@ -121,9 +132,10 @@ def find_title(slide):
     # print("BEST: ", best)
     return best["shape"]
 
-#CHECK IF THERE IS A PICTURE PLACEHOLDER
+# -------------------------------------------------
+# CHECK IF THERE IS A PICTURE PLACEHOLDER
+# -------------------------------------------------
 def is_picture_placeholder(shape) -> bool:
-    """Return True if shape is a placeholder expecting a picture."""
     if shape.shape_type != MSO_SHAPE_TYPE.PLACEHOLDER:
         return False
     try:
@@ -131,11 +143,16 @@ def is_picture_placeholder(shape) -> bool:
     except Exception:
         return False
 
+# ------------------------------------------------------------
+# CHECK IF A PICTURE IS A BACKGROUND (SHOULDN'T BE REPLACED)
+# ------------------------------------------------------------
 def is_background_image(shape, slide_width, slide_height, threshold=0.45) -> bool:
     coverage = (shape.width * shape.height) / (slide_width * slide_height)
     return coverage >= threshold
 
-#USING THE MAPPING FUNCTIONS CREATE THE JSON SCHEMA FOR EACH SLIDE
+# -------------------------------------------------------------------
+# USING THE MAPPING FUNCTIONS CREATE THE JSON SCHEMA FOR ONE SLIDE
+# -------------------------------------------------------------------
 def slide_mapping(slide, slide_index=None, slide_width=None, slide_height=None):
     result = {"title": [], "subtitle": [], "body": [], "bullets": [], "table": [], "image": []}
     title_shape = find_title(slide)
@@ -205,7 +222,9 @@ def slide_mapping(slide, slide_index=None, slide_width=None, slide_height=None):
         })
     return result
 
-#LOOP THROUGH PRESENTATION AND CREATE FULL JSON SCHEMA
+# --------------------------------------------------------
+# LOOP THROUGH PRESENTATION AND CREATE FULL JSON SCHEMA
+# --------------------------------------------------------
 def build_presentation_mapping(pptx_path):
     prs = Presentation(pptx_path)
     mapping = {}
@@ -214,14 +233,18 @@ def build_presentation_mapping(pptx_path):
     return mapping
 
 #----------------------------------------------------------- APPLYING TO PPTX ----------------------------------------------------------------------------------
+# --------------------------------------------------------
 #GET THE SHAPE ID FOR EACH SHAPE TO REPLACE TEXT/IMAGES
+# --------------------------------------------------------
 def find_shape_by_id(slide, shape_id) -> Optional[Any]:
     for shp in slide.shapes:
         if shp.shape_id == shape_id:
             return shp
     return None
 
-#SET THE TEXT IN A TABLE CELL
+# --------------------------------------------------------
+# SET THE TEXT IN A TABLE CELL
+# --------------------------------------------------------
 def set_cell(cell, text: str):
     tf = cell.text_frame
 
@@ -251,6 +274,9 @@ def set_cell(cell, text: str):
     for extra_p in list(tf.paragraphs)[1:]:
         tf._element.remove(extra_p._p)
 
+# --------------------------------------------------------------
+# cALLS SET_CELLS TO FILL IN THE ENTIRE TABLE WITH JSON CONTENT
+# --------------------------------------------------------------
 def fill_table(shape, rows_2d: List[Any], start_row: int = 0, pad_value: str = ""):
     if not hasattr(shape, "table"):
         return
@@ -307,15 +333,15 @@ def set_body_text(shape, items):
     
     
     per_line_rPr = []
-    last_style = None  # will store most recent donor_rPr
+    last_style = None 
 
     for p in paragraphs:
         if p.runs:
             donor_run = p.runs[0]
             donor_rPr = deepcopy(donor_run._r.rPr) if donor_run._r.rPr is not None else None
-            last_style = donor_rPr  # update last seen style
+            last_style = donor_rPr
         else:
-            donor_rPr = deepcopy(last_style)  # fallback to previous style
+            donor_rPr = deepcopy(last_style)  
 
         per_line_rPr.append(donor_rPr)
     
@@ -361,7 +387,9 @@ def set_body_text(shape, items):
         r.text = item["text"]
 
 
-#SETS THE PLAIN TEXT INTO THE PPTX
+# --------------------------------------------------------
+# SIMPLY ADDS THE PLAIN TEXT INTO THE NEW PPTX
+# --------------------------------------------------------
 def set_plain_text(shape, text: str):
     if not getattr(shape, "has_text_frame", False):
         return
@@ -384,11 +412,10 @@ def set_plain_text(shape, text: str):
     for extra_p in list(tf.paragraphs)[1:]:
         tf._element.remove(extra_p._p)
 
-def send_to_back(shape):
-    sp_tree = shape._element.getparent()
-    sp_tree.remove(shape._element)
-    sp_tree.insert(2, shape._element)  # index 2 = behind all shapes (0 and 1 are required spTree headers)
-
+# --------------------------------------------------------
+# HANDLES IMAGE REPLACEMENT IN THE PPTX, WORKS FOR BOTH
+#  PICTURE PLACEHOLDERS AND REGULAR IMAGES
+# --------------------------------------------------------
 def replace_image(shape, path: str):
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Image not found: {path}")
@@ -421,6 +448,9 @@ def replace_image(shape, path: str):
 
     raise TypeError("Target shape is neither a picture placeholder nor a picture shape.")
 
+# --------------------------------------------------------
+# APPLIES THE IMAGE REPLACEMENTS ONTO THE NEW SLIDES
+# --------------------------------------------------------
 def apply_images(slide, slide_map: Dict[str, Any], images_spec: Union[List[str], Dict[str, Any]]):
     img_targets = slide_map.get("image", [])
     if not img_targets:
@@ -460,8 +490,10 @@ def apply_images(slide, slide_map: Dict[str, Any], images_spec: Union[List[str],
                 if shp is not None and path:
                     replace_image(shp, path)
 
-# ---------- Apply JSON ----------
-#MAPS THE JSON FILLER TO EACH SLIDE
+
+# ---------------------------------------------------------------------
+# APPLIES TEXT AND IMAGES FROM THE JSON CREATOR TO THE NEW PPTX SLIDES
+# ---------------------------------------------------------------------
 def apply_json_to_slide(slide, slide_map: Dict[str, Any], json_slide: Dict[str, Any]):
     # 0) Images (do early so content doesn't overlap text work)
     if "images" in json_slide:
@@ -497,8 +529,6 @@ def apply_json_to_slide(slide, slide_map: Dict[str, Any], json_slide: Dict[str, 
             shp = find_shape_by_id(slide, regs[idx]["shape_id"])
             if shp is None:
                 continue
-
-            # value_list = list of { "text": "...", "bulleted": true/false }
             set_body_text(shp, value_list)
 
     # 4) Tables
@@ -512,29 +542,26 @@ def apply_json_to_slide(slide, slide_map: Dict[str, Any], json_slide: Dict[str, 
                 if obj is None:
                     return []
 
-                # Case: list containing a dict with "rows"
                 if isinstance(obj, list) and obj and isinstance(obj[0], dict) and "rows" in obj[0]:
                     return obj[0].get("rows", []) or []
 
-                # Case: single dict with "rows"
                 if isinstance(obj, dict) and "rows" in obj:
                     return obj.get("rows", []) or []
 
-                # Case: already a 2D list
                 if isinstance(obj, list) and obj and all(isinstance(x, list) for x in obj):
                     return obj
 
-                # Case: list of scalars (strings/numbers)
                 if isinstance(obj, list):
                     return [[x] for x in obj]
 
-                # Fallback
                 return []
 
             data_rows = extract_table_rows_2d(table_spec)
             fill_table(shp, data_rows)
 
-#MAPS THE JSON FILLER TO THE ACTUAL PPTX
+# -------------------------------------------------
+# MAPS THE JSON FILLER TO THE ACTUAL PPTX
+# -------------------------------------------------
 def apply_json_to_pptx(pptx_in: str, json_in: str, pptx_out: str, mapping: Optional[Dict[str, Any]] = None):
     prs = Presentation(pptx_in)
     if mapping is None:
@@ -556,7 +583,9 @@ def apply_json_to_pptx(pptx_in: str, json_in: str, pptx_out: str, mapping: Optio
 
     prs.save(pptx_out)
 
-# ---------- view JSON Filling Preview ----------
+# -------------------------------------------------
+# Testing function to preview JSON (unused)
+# -------------------------------------------------
 def preview_alignment(pptx_path: str, json_path: str):
     """
     Print a quick alignment summary without modifying files:

@@ -1,0 +1,38 @@
+@theme {
+  /* Brand */
+  --color-primary: #1575DB;
+  --color-secondary: #3a4878;
+  --color-surface: #F7F8FC;
+
+  /* Text shades */
+  --color-muted: #666666;
+  --color-subtle: #888888;
+  --color-faint: #999999;
+
+  /* Borders / dividers */
+  --color-border: #dde1ec;
+  --color-border-soft: #e8eaf0;
+
+  /* Presentation panel background */
+  --color-canvas: #c9cace;
+
+  /* Slide card decorative elements */
+  --color-slide-rule: #c8d6e8;
+  --color-slide-placeholder: #dce6f5;
+  --color-slide-placeholder-border: #a0b8d8;
+  --color-slide-block: #eef2f8;
+  --color-slide-label: #f0f2f8;
+
+  /* State colours */
+  --color-primary-muted: #e8f1fb;
+  --color-danger: #e53935;
+  --color-success: #28a745;
+
+  /* Custom animation */
+  --animate-scroll-left: scroll-left 30s linear infinite;
+}
+
+@keyframes scroll-left {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}

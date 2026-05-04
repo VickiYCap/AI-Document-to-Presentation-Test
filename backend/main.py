@@ -13,10 +13,10 @@ load_dotenv(find_dotenv())
 
 from fastapi import FastAPI, File, Form, Request, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from typing import List, Optional
+from fastapi.responses import JSONResponse
+from typing import List
 
-from backend.json_creator import get_filler_json, check_blanks, count_schema_elements
+from backend.json_creator import get_filler_json, count_schema_elements
 from backend.document_parser import extract_images, extract_text
 from backend.pptx_parser import apply_json_to_pptx, build_presentation_mapping
 
@@ -48,7 +48,9 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         headers=CORS_HEADERS,
     )
 
-
+# --------------------------------------------------------------------------------------
+# POST CALL TO ANALYZE THE PPTX TEMPLATE AND EXTRACT THE MAPPING (CALL THE BACKEND)
+# --------------------------------------------------------------------------------------
 @app.post("/analyze-template")
 async def analyze_template(pptx_file: UploadFile = File(...)):
     contents = await pptx_file.read()
@@ -84,7 +86,9 @@ async def analyze_template(pptx_file: UploadFile = File(...)):
 
     return JSONResponse({"slides": slides})
 
-
+# -------------------------------------------
+# POST CALL TO GET EXTRACTED IMAGES FROM PDF
+# -------------------------------------------
 @app.post("/pdf-images")
 async def pdf_images(pdf_file: UploadFile = File(...)):
     contents = await pdf_file.read()
@@ -112,7 +116,9 @@ async def pdf_images(pdf_file: UploadFile = File(...)):
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-
+# -------------------------------
+# POST CALL TO GENERATE NEW PPTX
+# -------------------------------
 @app.post("/generate")
 async def generate(
     pdf_file: UploadFile = File(...),

@@ -1,22 +1,13 @@
-# Fills the JSON schema for each slide using the mapping functions, 
-# then checks for blanks and fills them in
-import pymupdf
-import fitz
+"""After the schema for the powerpoint template is creates, this file creates and fills in the JSON according to the mapping and the parsed document. 
+It also counts the number of elements in each slide to give the LLM a better sense of how much content to generate, and to enforce that it fills in
+ all required fields. """
+
 import json
-import statistics
 import re
 import os
-import time
+
 from pathlib import Path
-
-from fastapi import FastAPI, HTTPException, APIRouter, Form
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-
-from typing import Optional, Tuple, Dict, Any, List, Optional, TypedDict
-from dotenv import load_dotenv, find_dotenv
-load_dotenv(find_dotenv())
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from backend.llm_api.llm_init import LLMService, LLMConfig
@@ -27,9 +18,14 @@ from .pptx_parser import apply_json_to_pptx, build_presentation_mapping
 from .prompts import CREATE_FILLER, CHECK_BLANKS, FILL_TABLE
 from .document_parser import extract_text
 
+from typing import Optional, Dict, Any, List, Optional, TypedDict
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv())
+
 
 #=================================
-# LOGGING STUFF
+# LOGGING Information
 #=================================
 LOG_DIR = os.getenv('LOG_DIR', os.path.join(os.path.dirname(__file__), '..', 'logs'))
 LOG_FILE = os.path.join(LOG_DIR, "policy_graph.log")
@@ -76,9 +72,9 @@ class SlideCount(TypedDict):
     body_rows: int                     
     body_items: int                     
 
-#=================================
-# COUNTING ELEMENTS FOR LLM TO BE MORE ACCURATE
-#=================================
+#================================================================
+# COUNTING ELEMENTS THAT THE LLM MAPS TO CHECK DEGRADATION 
+#================================================================
 def count_schema_elements(mapping: Dict[str, Any]) -> List[SlideCount]:
     def _slide_key_to_index(k: str) -> int:
         try:
@@ -122,15 +118,8 @@ def count_schema_elements(mapping: Dict[str, Any]) -> List[SlideCount]:
     return counts
 
 #=================================
-# ACTUAL JSON CREATING FUNCTIONS
+# TEXT SANITIZATION
 #=================================
-import json
-import re
-from typing import Dict, Any
-
-# -------------------------------------------------------------------
-#  EXTRACTED UTILITY FUNCTION (formerly nested inside get_filler_json)
-# -------------------------------------------------------------------
 def sanitize_txt(txt: str, is_subtitle: bool = False) -> str:
     if not txt:
         return ""
@@ -144,10 +133,9 @@ def sanitize_txt(txt: str, is_subtitle: bool = False) -> str:
         txt = " ".join(words[:limit]).rstrip(".;,:")
     return txt
 
-
-# -------------------------------------------------------------------
-#  ORIGINAL FUNCTION, UPDATED TO CALL sanitize_txt(...)
-# -------------------------------------------------------------------
+#=================================
+# JSON GENERATION
+#=================================
 def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schema, user_images: Optional[List[str]] = None, style_prompt: str = "") -> Dict[str, Any]:
     schema_str = json.dumps(mapping, indent=2, ensure_ascii=False)
     parsed_data = {
@@ -161,7 +149,7 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
     count_str = json.dumps(count_schema, indent=2, ensure_ascii=False)
 
     # ---------------------------
-    # Internal helpers (table-only)
+    # Table helper utilities
     # ---------------------------
     def _truncate_words(s: str, max_words: int = 3) -> str:
         s = (s or "").strip()
@@ -196,67 +184,6 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
                     headers.append("")
             return headers
         return []
-
-    _VAGUE = {
-        "innovation", "collaboration", "support", "updates", "guidelines",
-        "improvements", "enhancements", "processes", "activities", "timeline",
-        "development", "partnerships", "best practices"
-    }
-
-    def _looks_vague(token: str) -> bool:
-        t = (token or "").strip().lower()
-        return t in _VAGUE or (len(t.split()) == 1 and t.isalpha() and len(t) > 3)
-
-    def _title_case_phrase(s: str) -> str:
-        return " ".join([w.capitalize() for w in (s or "").split()])
-
-    def _refine_cell(cand: str, header: str = "", row_topic: str = "") -> str:
-        verbs_by_header = {
-            "compliance": "Ensure",
-            "enforcement": "Enforce",
-            "penalties": "Apply",
-            "risk": "Assess",
-            "risks": "Assess",
-            "risk assessment": "Assess",
-            "scope": "Define",
-            "objectives": "Achieve",
-            "monitoring": "Monitor",
-            "reporting": "Submit",
-            "standards": "Follow",
-            "governance": "Establish",
-            "transparency": "Disclose",
-            "data protection": "Protect",
-            "privacy": "Protect",
-            "accountability": "Assign",
-            "training": "Train",
-            "guidelines": "Follow",
-            "stakeholders": "Engage",
-            "timeline": "Schedule"
-        }
-        h = (header or "").strip()
-        rt = (row_topic or "").strip()
-        base = (cand or "").strip()
-
-        verb = ""
-        key = h.lower()
-        if key in verbs_by_header:
-            verb = verbs_by_header[key]
-        else:
-            for k, v in verbs_by_header.items():
-                if k in key:
-                    verb = v
-                    break
-        if not verb:
-            verb = "Define" if h else "Clarify"
-
-        if h and h.lower() not in {"", "n/a", "header"}:
-            phrase = f"{verb} {h}"
-        elif rt:
-            phrase = f"{verb} {rt}"
-        else:
-            phrase = base or "Define Scope"
-
-        return _truncate_words(_title_case_phrase(phrase), 3) or "Define Scope"
 
     def _make_column_semantics(headers: List[str]) -> List[str]:
         canonical = {
@@ -293,7 +220,7 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
         return hints
 
     # ---------------------------
-    # Pydantic (for table-only calls)
+    # Pydantic schemas for table LLM calls
     # ---------------------------
     class TableRowsOnly(BaseModel):
         rows: List[List[str]] = Field(default_factory=list)
@@ -305,7 +232,9 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
         topics: List[str] = Field(default_factory=list)
 
     # ---------------------------
-    # Phase 1: ORIGINAL non-table behavior (unchanged)
+    # Phase 1: Fill title, subtitle, and body for all slides in one batch call.
+    # Tables are included in the schema so the LLM understands the full structure,
+    # but the table output is discarded — Phase 2 handles tables with better context.
     # ---------------------------
     system_prompt = CREATE_FILLER
     human_prompt = (
@@ -347,7 +276,8 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
     data = json.loads(filler_obj.model_dump_json())
 
     # ---------------------------
-    # Reservoir: key_points first, then summary sentences as fallback
+    # Build a reservoir of text chunks from the parsed document hierarchy.
+    # Used as a fallback when the LLM leaves a field empty or produces too little content.
     # ---------------------------
     def _extract_hierarchy_texts(hierarchy):
         texts = []
@@ -385,17 +315,18 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
 
     reservoir_i = 0
     slides_out: List[Dict[str, Any]] = []
-    non_table_context: List[Dict[str, Any]] = []   # for Phase 2
-    table_schema_only: List[List[Dict[str, Any]]] = []  # for Phase 2
+    non_table_context: List[Dict[str, Any]] = []  
+    table_schema_only: List[List[Dict[str, Any]]] = [] 
 
     slide_keys = sorted(mapping.keys(), key=lambda k: int(k.split("_")[-1]))
     llm_slides = data.get("slides", [])
     while len(llm_slides) < len(slide_keys):
         llm_slides.append({"title": "", "subtitle": [], "body": [], "table": [], "images": []})
 
-    # ---------------------------
-    # Process slides (ORIGINAL title/subtitle/body shaping)
-    # ---------------------------
+    # ---------------------------------------------------------------------
+    # Shape Phase 1 output: enforce word limits, title-case titles,
+    # and fill any gaps from the reservoir.
+    # ---------------------------------------------------------------------
     for idx, slide_key in enumerate(slide_keys):
         schema_slide = mapping.get(slide_key, {}) or {}
         llm_slide = llm_slides[idx] if idx < len(llm_slides) else {}
@@ -405,7 +336,7 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
         body_targets = schema_slide.get("body", [])
         schema_tables = schema_slide.get("table", []) or []
 
-        # ----- Title (original) -----
+        # ----- Title -----
         title_val = llm_slide.get("title", "") if title_needed else ""
         title_val = sanitize_txt(title_val)
         if title_needed and not title_val:
@@ -422,7 +353,7 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
         except Exception:
             pass
 
-        # ----- Subtitles (original) -----
+        # ----- Subtitles -----
         expected_subs = len(sub_targets)
         subs_llm = llm_slide.get("subtitle", []) or []
         subs_fixed = []
@@ -437,7 +368,7 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
                     cand = ""
             subs_fixed.append(cand)
 
-        # ----- Body (original) -----
+        # ----- Body -----
         body_llm = llm_slide.get("body", []) or []
         body_fixed = []
         seen_in_slide = set(([title_val] if title_needed else []) + subs_fixed)
@@ -504,15 +435,14 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
 
             body_fixed.append(row_fixed)
 
-        # Original debug print
         for b_idx, body_block in enumerate(body_targets or []):
             print(
                 f"Row {b_idx+1}: items needed {len(body_block.get('content', []) or [])}, "
                 f"LLM gave {len(body_llm[b_idx]) if b_idx < len(body_llm) else 0}"
             )
 
-        # NOTE: We DO NOT build tables here anymore.
-        # We store non-table context and schema for Phase 2.
+        # Save finalized non-table content and the raw table schema separately.
+        # Tables are filled in Phase 2 using the finalized slide content for deduplication.
         non_table_context.append({
             "title": title_val,
             "subtitle": subs_fixed,
@@ -520,7 +450,6 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
         })
         table_schema_only.append(schema_tables)
 
-        # Add slide with empty tables for now; we'll fill tables after Phase 2.
         slides_out.append({
             "title": title_val,
             "subtitle": subs_fixed,
@@ -529,17 +458,18 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
             "images": llm_slide.get("images", []),
         })
 
-    # ---------------------------
-    # Override slide 1 title with the document title if the parser found one
-    # ---------------------------
+    # ---------------------------------------------------------------------
+    # Pin slide 1 title to the document's parsed title when available,
+    # overriding whatever the LLM generated.
+    # ---------------------------------------------------------------------
     doc_title = (parsed.get("title") or "").strip()
     if slides_out and doc_title:
         slides_out[0]["title"] = doc_title
         non_table_context[0]["title"] = doc_title
 
-    # ---------------------------
+    # ---------------------------------------------------------------------
     # Phase 2a: Build table hints (headers + semantics + row topics)
-    # ---------------------------
+    # ---------------------------------------------------------------------
     topics_cfg = LLMConfig(
         temperature=0.2,
         max_tokens=2000,
@@ -560,7 +490,8 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
             n_rows = len(row_lengths)
             data_rows = (n_rows - 1) if (headers and n_rows > 0) else n_rows
 
-            # Generate row topics per table
+            # Ask the LLM for 2-3 word topics — one per data row — to anchor
+            # cell content across columns in Phase 2b.
             row_topics_list: List[str] = []
             if data_rows > 0:
                 try:
@@ -635,98 +566,10 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
             pg_logger.warning(f"Table generation error (slide {idx+1}): {repr(e)}")
             slide_table_json.append({"table": []})
 
-    # ---------------------------
-    # Phase 2c: Coerce shapes + enforce ≤3 words + de-vague + de-dupe
-    # ---------------------------
+    # Write Phase 2b output directly into slides
     for idx in range(len(slides_out)):
-        schema_tables = table_schema_only[idx] or []
-        returned_tables = (slide_table_json[idx] or {}).get("table", []) if idx < len(slide_table_json) else []
-
-        print(f"\n[DEBUG] Slide {idx+1} table shapes (row lengths per row):")
-        for t_idx, t_spec in enumerate(schema_tables):
-            print("  Table", t_idx + 1, "->", _row_lengths_from_table_spec(t_spec))
-
-        # Prepare a de-dup set that includes title/subtitle/body (to avoid slide-level duplicates)
-        non_table_seen = set()
-        if slides_out[idx].get("title"):
-            non_table_seen.add(slides_out[idx]["title"].strip().lower())
-        for s in slides_out[idx].get("subtitle", []):
-            if s:
-                non_table_seen.add(s.strip().lower())
-        for row in slides_out[idx].get("body", []):
-            for item in row:
-                if item and isinstance(item, dict):
-                    t = item.get("text", "")
-                    if t:
-                        non_table_seen.add(t.strip().lower())
-
-        tables_fixed: List[Dict[str, Any]] = []
-        for t_idx, t_spec in enumerate(schema_tables):
-            row_lengths = _row_lengths_from_table_spec(t_spec)
-            headers = _extract_table_headers(t_spec)
-            hints = table_hints[idx][t_idx] if idx < len(table_hints) and t_idx < len(table_hints[idx]) else {}
-            row_topics = hints.get("row_topics", []) if hints else []
-
-            if t_idx < len(returned_tables):
-                llm_rows = (returned_tables[t_idx] or {}).get("rows", []) or []
-            else:
-                llm_rows = []
-
-            flat_cells: List[str] = []
-            for r in llm_rows:
-                if isinstance(r, list):
-                    for c in r:
-                        s = _truncate_words(sanitize_txt(str(c) if c is not None else ""), 3)
-                        if s:
-                            flat_cells.append(s)
-
-            total_needed = sum(row_lengths) if row_lengths else 0
-            print(f"[DEBUG] Slide {idx+1} Table {t_idx+1}: cells needed={total_needed}, LLM cells parsed={len(flat_cells)}")
-
-            # Seed if absolutely nothing
-            if not flat_cells:
-                seed = slides_out[idx].get("title", "") or "Slide Content"
-                seed = _truncate_words(sanitize_txt(seed), 2) or "Cell"
-                flat_cells = [seed]
-
-            # Build rows with final enforcement + de-vague + de-dupe (against both table cells & non-table text)
-            fixed_rows: List[List[str]] = []
-            seen_cells = set(non_table_seen)  # start with non-table strings to avoid slide-level duplicates
-            i = 0
-            for r_i, rl in enumerate(row_lengths):
-                row_cells: List[str] = []
-                for c_i in range(rl):
-                    if i < len(flat_cells):
-                        cand = flat_cells[i]; i += 1
-                    else:
-                        base = row_cells[-1] if row_cells else (fixed_rows[-1][-1] if fixed_rows and fixed_rows[-1] else (flat_cells[-1] if flat_cells else "Cell"))
-                        cand = base
-
-                    cand = _truncate_words(sanitize_txt(cand), 3) or "Cell"
-
-                    header = headers[c_i] if headers and c_i < len(headers) else ""
-                    topic_index = r_i - 1 if headers else r_i   # adjust if row 0 is header row
-                    topic = row_topics[topic_index] if 0 <= topic_index < len(row_topics) else ""
-
-                    if _looks_vague(cand) or cand.strip().lower() in seen_cells:
-                        cand = _refine_cell(cand, header=header, row_topic=topic)
-
-                    cand = _truncate_words(cand, 3)
-                    seen_cells.add(cand.strip().lower())
-                    row_cells.append(cand)
-                fixed_rows.append(row_cells)
-
-            tables_fixed.append({"rows": fixed_rows})
-
-            # Original-like debug
-            llm_row_count = len(llm_rows)
-            llm_max_cols = max((len(r) for r in llm_rows if isinstance(r, list)), default=0)
-            print(
-                f"Table {t_idx+1}: rows needed {len(row_lengths)}, "
-                f"LLM gave rows {llm_row_count}, max cols {llm_max_cols}"
-            )
-
-        slides_out[idx]["table"] = tables_fixed
+        raw = (slide_table_json[idx] or {}).get("table", []) if idx < len(slide_table_json) else []
+        slides_out[idx]["table"] = [{"rows": t.get("rows", [])} for t in raw]
 
     # Distribute user-provided images across slides in order of image slots
     if user_images:
@@ -738,9 +581,9 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
 
     return {"slides": slides_out}
 
-#=================================
-# CHECKS FOR BLANKS AND FILLS THEM IN
-#=================================
+#===========================================
+# BLANK FIELD REPAIR (currently unused)
+#===========================================
 def check_blanks(parsed: Dict[str, Any], filler_json: Dict[str, Any]) -> Dict[str, Any]:
     def extract_missing(data: Any) -> Optional[Any]:
         if isinstance(data, dict):
