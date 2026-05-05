@@ -15,7 +15,7 @@ import logging
 from logging.handlers import WatchedFileHandler
 
 from .pptx_parser import apply_json_to_pptx, build_presentation_mapping
-from .prompts import CREATE_FILLER, CHECK_BLANKS, FILL_TABLE
+from .prompts import CREATE_FILLER, CHECK_BLANKS, FILL_TABLE, TEMPLATE_GENERATE
 from .document_parser import extract_text
 
 from typing import Optional, Dict, Any, List, Optional, TypedDict
@@ -66,15 +66,33 @@ class Filler(BaseModel):
     slides: List[Slide]
 
 class SlideCount(TypedDict):
-    slide_index: int                      
-    titles: int                          
-    subtitles: int                      
-    body_rows: int                     
-    body_items: int                     
+    slide_index: int
+    titles: int
+    subtitles: int
+    body_rows: int
+    body_items: int
 
-#================================================================
-# COUNTING ELEMENTS THAT THE LLM MAPS TO CHECK DEGRADATION 
-#================================================================
+# Models for llm_slide_generation structural template
+class BodyShapeTemplate(BaseModel):
+    item_count: int
+    bulleted: bool = True
+
+class TableTemplate(BaseModel):
+    rows: int
+    cols: int
+
+class SlideTemplateItem(BaseModel):
+    slide_type: str
+    subtitle_count: int = 0
+    body_shapes: List[BodyShapeTemplate] = Field(default_factory=list)
+    tables: List[TableTemplate] = Field(default_factory=list)
+
+class PresentationTemplate(BaseModel):
+    slides: List[SlideTemplateItem]
+
+#==============================================================================
+# COUNTING ELEMENTS THAT THE LLM MAPS TO CHECK DEGRADATION (just for checking)
+#===============================================================================
 def count_schema_elements(mapping: Dict[str, Any]) -> List[SlideCount]:
     def _slide_key_to_index(k: str) -> int:
         try:
@@ -132,6 +150,90 @@ def sanitize_txt(txt: str, is_subtitle: bool = False) -> str:
     if len(words) > limit:
         txt = " ".join(words[:limit]).rstrip(".;,:")
     return txt
+
+#=================================================================
+# IF NO PPTX TEMPLATE GIVEN, LLM SHOULD GENERATE ITS OWN TEMPLATE
+#=================================================================
+def llm_slide_generation(parsed: Dict[str, Any], style_prompt: str = "") -> tuple:
+    parsed_data = {
+        "file": parsed.get("file", ""),
+        "title": parsed.get("title"),
+        "author": parsed.get("author"),
+        "date": parsed.get("date"),
+        "hierarchy": parsed.get("hierarchy", []),
+    }
+    parsed_str = json.dumps(parsed_data, indent=2, ensure_ascii=False)
+
+    human_prompt = parsed_str
+    if style_prompt.strip():
+        human_prompt = f"User instructions: {style_prompt}\n\nParsed document:\n{parsed_str}"
+
+    cfg = LLMConfig(
+        temperature=0.3,
+        max_tokens=4000,
+        provider="anthropic",
+        host_provider="anthropic",
+        model="claude-haiku-4-5-20251001"
+    )
+    llm = LLMService(cfg, logger=pg_logger)
+
+    messages = [
+        SystemMessage(content=TEMPLATE_GENERATE),
+        HumanMessage(content=human_prompt),
+    ]
+
+    template_obj: PresentationTemplate = llm.invoke_structured(messages, PresentationTemplate)
+    template = json.loads(template_obj.model_dump_json())
+
+    # Convert structural template to the mapping format expected by get_filler_json
+    mapping: Dict[str, Any] = {}
+    shape_counter = 1
+
+    for idx, slide in enumerate(template.get("slides", []), start=1):
+        slide_key = f"slide_{idx}"
+
+        title_entry = [{"shape_id": shape_counter, "name": "Title"}]
+        shape_counter += 1
+
+        subtitle_entries = []
+        for s in range(slide.get("subtitle_count", 0)):
+            subtitle_entries.append({"shape_id": shape_counter, "name": f"Subtitle {s + 1}"})
+            shape_counter += 1
+
+        body_entries = []
+        for b_idx, body_spec in enumerate(slide.get("body_shapes", [])):
+            content = [{"bullets": body_spec.get("bulleted", True)}
+                       for _ in range(max(1, body_spec.get("item_count", 3)))]
+            body_entries.append({
+                "shape_id": shape_counter,
+                "name": f"Body {b_idx + 1}",
+                "content": content,
+            })
+            shape_counter += 1
+
+        table_entries = []
+        for t_idx, table_spec in enumerate(slide.get("tables", [])):
+            n_rows = max(2, table_spec.get("rows", 3))
+            n_cols = max(2, table_spec.get("cols", 3))
+            table_entries.append({
+                "shape_id": shape_counter,
+                "name": f"Table {t_idx + 1}",
+                "rows": n_rows,
+                "cols": n_cols,
+                "total_cells": n_rows * n_cols,
+            })
+            shape_counter += 1
+
+        mapping[slide_key] = {
+            "title": title_entry,
+            "subtitle": subtitle_entries,
+            "body": body_entries,
+            "table": table_entries,
+            "image": [],
+        }
+
+    count_schema = count_schema_elements(mapping)
+    return mapping, count_schema
 
 #=================================
 # JSON GENERATION
@@ -528,9 +630,9 @@ def get_filler_json(mapping: Dict[str, Any], parsed: Dict[str, Any], count_schem
             })
         table_hints.append(hints_for_slide)
 
-    # ---------------------------
+    # -------------------------------------------------------------
     # Phase 2b: Generate tables per slide using FILL_TABLE
-    # ---------------------------
+    # -------------------------------------------------------------
     system_prompt_tables = FILL_TABLE
     slide_table_json: List[Dict[str, Any]] = []
     for idx in range(len(slides_out)):

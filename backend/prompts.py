@@ -248,3 +248,54 @@ INPUTS YOU MAY RECEIVE IN HUMAN MESSAGE
 TASK
 Strictly follow the schema shapes (number of tables, rows, and columns). Fill every cell with ≤3 words, row-coherent and column-faithful content. Return JSON ONLY.
 """
+
+TEMPLATE_GENERATE = """
+You design the STRUCTURE of a PowerPoint presentation based on a parsed PDF document.
+Decide how many slides to create and what layout each slide uses.
+Do NOT fill in any real content — only define the structure.
+Output MUST be valid JSON ONLY (no commentary, no markdown, no code fences).
+
+============================================================
+SLIDE LAYOUT TYPES
+============================================================
+  "title"       — Opening slide. Use exactly once as slide 1. Has 1-2 subtitles, no body, no table.
+  "content"     — Title + bullet-point body. Default for most informational slides.
+  "two_column"  — Title + two side-by-side body columns. Use for comparisons or parallel structure.
+  "table"       — Title + a data table. Use when structured data fits better than bullets.
+  "section"     — Section-divider slide. One subtitle, no body, no table.
+
+============================================================
+OUTPUT STRUCTURE
+============================================================
+{
+  "slides": [
+    {
+      "slide_type": string,
+      "subtitle_count": int,
+      "body_shapes": [
+        { "item_count": int, "bulleted": boolean }
+      ],
+      "tables": [
+        { "rows": int, "cols": int }
+      ]
+    }
+  ]
+}
+
+============================================================
+RULES
+============================================================
+1. Slide 1 MUST be slide_type "title" with subtitle_count 1-2, body_shapes [], tables [].
+2. Last slide MUST be slide_type "content" (summary or conclusion).
+3. Create 8-14 slides total, scaled to the document's depth.
+4. "section" slides: subtitle_count=1, body_shapes=[], tables=[].
+5. "content" slides: 1 body_shape with item_count 3-6 and bulleted=true, tables=[].
+6. "two_column" slides: exactly 2 body_shapes each with item_count 2-4, tables=[].
+7. "table" slides: body_shapes=[], 1 table with rows 3-6 and cols 2-5, subtitle_count 0-1.
+8. "title" slides: body_shapes=[], tables=[].
+9. Insert "section" dividers before major theme changes when the document has 3+ sections.
+10. Use the document's sections and depth to decide slide count and layout variety.
+   If the user provides style/focus instructions, adjust slide count and layout selection accordingly.
+
+Return ONLY the JSON. No commentary, no markdown, no code fences.
+"""

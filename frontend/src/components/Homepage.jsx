@@ -93,8 +93,8 @@ function Homepage() {
   }
 
   function handleNext() {
-    if (!pdfFile || !pptxFile) {
-      setError('Please upload both a PDF and a PPTX template.');
+    if (!pdfFile) {
+      setError('Please upload a PDF file.');
       return;
     }
     setError(null);

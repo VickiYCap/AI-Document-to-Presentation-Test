@@ -12,6 +12,7 @@ function Powerpoint() {
     const [error, setError] = useState(null);
     const [picker, setPicker] = useState(null); // { slideIndex, shapeId } | null
     const [generatedSlides, setGeneratedSlides] = useState([]);
+    const [fillerSlides, setFillerSlides] = useState(null);
     const [pptxDownloadUrl, setPptxDownloadUrl] = useState(null);
     const [pdfDownloadUrl, setPdfDownloadUrl] = useState(null);
 
@@ -29,11 +30,12 @@ function Powerpoint() {
         setPptxDownloadUrl(null);
         setPdfDownloadUrl(null);
         setGeneratedSlides([]);
+        setFillerSlides(null);
         setLoading(true);
         try {
             const form = new FormData();
             form.append('pdf_file', pdfFile);
-            form.append('pptx_file', pptxFile);
+            if (pptxFile) form.append('pptx_file', pptxFile);
 
             const meta = [];
             for (const { file, slideIndex, shapeId } of Object.values(imageReplacements)) {
@@ -60,6 +62,9 @@ function Powerpoint() {
             }
             if (data.slides?.length) {
                 setGeneratedSlides(data.slides);
+            }
+            if (data.filler_json?.slides?.length) {
+                setFillerSlides(data.filler_json.slides);
             }
         } catch (e) {
             setError(e.message);
@@ -171,11 +176,48 @@ function Powerpoint() {
                             <div key={slide.slide_index} className='bg-white rounded-[10px] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.15)]'>
                                 <div className='text-[0.75rem] font-semibold text-secondary px-[10px] py-[6px] bg-slide-label border-b border-border'>Slide {slide.slide_index + 1}</div>
                                 <div className='relative w-full leading-[0]'>
-                                    <img
-                                        src={slide.thumbnail}
-                                        alt={`Slide ${slide.slide_index + 1}`}
-                                        className='w-full block'
-                                    />
+                                    <img src={slide.thumbnail} alt={`Slide ${slide.slide_index + 1}`} className='w-full block' />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : fillerSlides ? (
+                    <div className='flex flex-col gap-6'>
+                        {fillerSlides.map((slide, idx) => (
+                            <div key={idx} className='bg-white rounded-[10px] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.15)]'>
+                                <div className='text-[0.75rem] font-semibold text-secondary px-[10px] py-[6px] bg-slide-label border-b border-border'>Slide {idx + 1}</div>
+                                <div className='p-5'>
+                                    {slide.title && <h2 className='text-[1.1rem] font-bold text-secondary m-0 mb-2'>{slide.title}</h2>}
+                                    {slide.subtitle?.length > 0 && (
+                                        <div className='flex gap-3 mb-3'>
+                                            {slide.subtitle.map((s, si) => (
+                                                <span key={si} className='text-[0.78rem] font-semibold text-primary bg-primary-muted px-2 py-[2px] rounded'>{s}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {slide.body?.map((block, bi) => (
+                                        <ul key={bi} className='m-0 mb-2 pl-5 list-none'>
+                                            {block.map((item, ii) => (
+                                                <li key={ii} className='text-[0.85rem] text-secondary mb-1 flex gap-2'>
+                                                    {item.bulleted && <span className='text-primary'>•</span>}
+                                                    <span>{item.text}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ))}
+                                    {slide.table?.map((tbl, ti) => (
+                                        <table key={ti} className='w-full border-collapse text-[0.78rem] mt-2'>
+                                            <tbody>
+                                                {tbl.rows?.map((row, ri) => (
+                                                    <tr key={ri} className={ri === 0 ? 'bg-primary text-white' : 'even:bg-slate-50'}>
+                                                        {row.map((cell, ci) => (
+                                                            <td key={ci} className='border border-border px-2 py-1'>{cell}</td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    ))}
                                 </div>
                             </div>
                         ))}
@@ -239,7 +281,7 @@ function Powerpoint() {
                         ))}
                     </div>
                 ) : (
-                    <p className='text-subtle text-[0.95rem] text-center mt-10'>No template selected — upload a PPTX on the home page first.</p>
+                    <p className='text-subtle text-[0.95rem] text-center mt-10'>Click Generate to create your presentation.</p>
                 )}
             </div>
         </div>

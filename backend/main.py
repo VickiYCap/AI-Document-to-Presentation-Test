@@ -15,9 +15,9 @@ load_dotenv(find_dotenv())
 from fastapi import FastAPI, File, Form, Request, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import List
+from typing import List, Optional
 
-from backend.json_creator import get_filler_json, count_schema_elements
+from backend.json_creator import get_filler_json, count_schema_elements, llm_slide_generation
 from backend.document_parser import extract_images, extract_text
 from backend.pptx_parser import apply_json_to_pptx, build_presentation_mapping
 
@@ -123,87 +123,101 @@ async def pdf_images(pdf_file: UploadFile = File(...)):
 @app.post("/generate")
 async def generate(
     pdf_file: UploadFile = File(...),
-    pptx_file: UploadFile = File(...),
+    pptx_file: Optional[UploadFile] = None,
     image_meta: str = Form(default="[]"),
     image_files: List[UploadFile] = File(default=[]),
     style_prompt: str = Form(default=""),
 ):
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         pdf_path = os.path.join(tmp, pdf_file.filename or "input.pdf")
-        pptx_path = os.path.join(tmp, pptx_file.filename or "template.pptx")
         json_path = os.path.join(tmp, "filled.json")
         out_path = os.path.join(tmp, "output.pptx")
 
         with open(pdf_path, "wb") as f:
             f.write(await pdf_file.read())
-        with open(pptx_path, "wb") as f:
-            f.write(await pptx_file.read())
-
-        # Save uploaded replacement images
-        meta_list = json.loads(image_meta)
-        img_replacements: dict[int, list] = {}
-        for i, (meta, img_file) in enumerate(zip(meta_list, image_files)):
-            ext = os.path.splitext(img_file.filename or "img.png")[1] or ".png"
-            img_path = os.path.join(tmp, f"replacement_{i}{ext}")
-            with open(img_path, "wb") as f:
-                f.write(await img_file.read())
-            slide_idx = meta["slide_index"]
-            img_replacements.setdefault(slide_idx, []).append({
-                "shape_id": meta["shape_id"],
-                "path": img_path,
-            })
 
         parsed = extract_text(pdf_path)
-        schema = build_presentation_mapping(Path(pptx_path))
-        count = count_schema_elements(schema)
-        filler = get_filler_json(schema, parsed, count, style_prompt=style_prompt)
-        # final = check_blanks(parsed, filler)
-        final = filler
 
-        # Inject image replacements into the filled JSON before applying
-        for slide_idx, replacements in img_replacements.items():
-            if slide_idx < len(final.get("slides", [])):
-                final["slides"][slide_idx]["images"] = {
-                    "by": "id",
-                    "items": replacements,
-                }
+        pptx_bytes = None
+        pdf_bytes = None
+        slides = []
 
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(final, f, ensure_ascii=False, indent=2)
+        if pptx_file is not None and pptx_file.filename:
+            # --- PPTX-template path ---
+            pptx_path = os.path.join(tmp, pptx_file.filename or "template.pptx")
+            with open(pptx_path, "wb") as f:
+                f.write(await pptx_file.read())
 
-        apply_json_to_pptx(pptx_in=pptx_path, json_in=json_path, pptx_out=out_path)
-
-        with open(out_path, "rb") as f:
-            pptx_bytes = f.read()
-
-    # Convert the generated PPTX to PDF in a clean temp dir (avoids converting the template too)
-    slides = []
-    pdf_bytes = None
-
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as conv_tmp:
-        pptx_conv = os.path.join(conv_tmp, "output.pptx")
-        pdf_conv = os.path.join(conv_tmp, "output.pdf")
-
-        with open(pptx_conv, "wb") as f:
-            f.write(pptx_bytes)
-
-        convert(conv_tmp, conv_tmp)
-
-        if os.path.exists(pdf_conv):
-            doc = fitz.open(pdf_conv)
-            for idx, page in enumerate(doc):
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-                thumbnail = base64.b64encode(pix.tobytes("png")).decode()
-                slides.append({
-                    "slide_index": idx,
-                    "thumbnail": f"data:image/png;base64,{thumbnail}",
+            # Save uploaded replacement images
+            meta_list = json.loads(image_meta)
+            img_replacements: dict[int, list] = {}
+            for i, (meta, img_file) in enumerate(zip(meta_list, image_files)):
+                ext = os.path.splitext(img_file.filename or "img.png")[1] or ".png"
+                img_path = os.path.join(tmp, f"replacement_{i}{ext}")
+                with open(img_path, "wb") as f:
+                    f.write(await img_file.read())
+                slide_idx = meta["slide_index"]
+                img_replacements.setdefault(slide_idx, []).append({
+                    "shape_id": meta["shape_id"],
+                    "path": img_path,
                 })
-            doc.close()
-            with open(pdf_conv, "rb") as f:
-                pdf_bytes = f.read()
+
+            schema = build_presentation_mapping(Path(pptx_path))
+            count = count_schema_elements(schema)
+            filler = get_filler_json(schema, parsed, count, style_prompt=style_prompt)
+            final = filler
+
+            # Inject image replacements into the filled JSON before applying
+            for slide_idx, replacements in img_replacements.items():
+                if slide_idx < len(final.get("slides", [])):
+                    final["slides"][slide_idx]["images"] = {
+                        "by": "id",
+                        "items": replacements,
+                    }
+
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(final, f, ensure_ascii=False, indent=2)
+
+            apply_json_to_pptx(pptx_in=pptx_path, json_in=json_path, pptx_out=out_path)
+
+            with open(out_path, "rb") as f:
+                pptx_bytes = f.read()
+
+        else:
+            # --- No-PPTX path: LLM generates slide structure, then fills from PDF ---
+            schema, count = llm_slide_generation(parsed, style_prompt=style_prompt)
+            final = get_filler_json(schema, parsed, count, style_prompt=style_prompt)
+
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(final, f, ensure_ascii=False, indent=2)
+
+    # Convert the generated PPTX to PDF (only when a PPTX template was used)
+    if pptx_bytes is not None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as conv_tmp:
+            pptx_conv = os.path.join(conv_tmp, "output.pptx")
+            pdf_conv = os.path.join(conv_tmp, "output.pdf")
+
+            with open(pptx_conv, "wb") as f:
+                f.write(pptx_bytes)
+
+            convert(conv_tmp, conv_tmp)
+
+            if os.path.exists(pdf_conv):
+                doc = fitz.open(pdf_conv)
+                for idx, page in enumerate(doc):
+                    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+                    thumbnail = base64.b64encode(pix.tobytes("png")).decode()
+                    slides.append({
+                        "slide_index": idx,
+                        "thumbnail": f"data:image/png;base64,{thumbnail}",
+                    })
+                doc.close()
+                with open(pdf_conv, "rb") as f:
+                    pdf_bytes = f.read()
 
     return JSONResponse({
-        "pptx_base64": base64.b64encode(pptx_bytes).decode(),
+        "pptx_base64": base64.b64encode(pptx_bytes).decode() if pptx_bytes else None,
         "pdf_base64": base64.b64encode(pdf_bytes).decode() if pdf_bytes else None,
         "slides": slides,
+        "filler_json": final,
     })
